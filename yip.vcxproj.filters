@@ -2,12 +2,19 @@
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <ClInclude Include="..\..\inc\yip.h" />
+    <ClInclude Include="inc\yip.h">
+      <Filter>inc</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="yipServer.cpp" />
     <ClCompile Include="yipClient.cpp" />
-    <ClCompile Include="..\..\inc\main.cpp" />
     <ClCompile Include="TCPServer.cpp" />
     <ClCompile Include="TCPClient.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="inc">
+      <UniqueIdentifier>{8c9fcde9-52dc-4277-b3f4-0e25d3daab1f}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
 </Project>
