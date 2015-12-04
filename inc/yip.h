@@ -10,12 +10,8 @@
 
 namespace yip
 {
-	class YIP_API CYip
-	{
-	public:
-		static int serverFunc(void* pData);
-		static int clientFunc(void* pData);
-	};
+	int serverFunc(void* pData);
+	int clientFunc(void* pData);
 
 	//!< Type of a socket (ptr)
 	typedef uti::ptr socket_t;

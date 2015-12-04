@@ -8,7 +8,7 @@ using namespace uti;
 
 int _tmain(int argc, _TCHAR* argv[])
 {
-	int32 iReturn = yip::CYip::serverFunc(nullptr);
+	int32 iReturn = yip::serverFunc(nullptr);
 
 	system("PAUSE");
 

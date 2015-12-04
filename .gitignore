@@ -49,3 +49,7 @@ Temporary Items
 *.sdf
 *.obj
 *.opensdf
+*.exe
+*.exp
+*.ilk
+*.lib
