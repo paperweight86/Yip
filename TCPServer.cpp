@@ -18,8 +18,7 @@ CTCPServer::CTCPServer() : m_listen(INVALID_SOCKET),
 						   m_bOpen(false)
 {
 	memset(&m_aRxBuffer[0],  0, m_kRxBufferLen);
-	memset(&m_aClients[0],   0, m_kMaxConnections);
-	memset(&m_aConnected[0], 0, m_kMaxConnections);
+	memset(&clients, 0, m_kMaxConnections * sizeof(ServerClient));
 
 	// Initialize Winsock
 	// TODO: move to dll main init
@@ -29,6 +28,7 @@ CTCPServer::CTCPServer() : m_listen(INVALID_SOCKET),
 	{
 		printf("WSAStartup failed with error: %d\n", iResult);
 	}
+	m_recieve = false;
 }
 
 CTCPServer::~CTCPServer()
@@ -107,22 +107,28 @@ bool CTCPServer::Listen()
 	}
 
 	// Accept a client socket
-	socket_t client = accept(m_listen, NULL, NULL);
+	sockaddr clientAddr {};
+
+	socket_t client = accept(m_listen, &clientAddr, NULL);
 	if (client == INVALID_SOCKET) 
 	{
 		printf("accept failed with error: %d\n", WSAGetLastError());
 		return false;
 	}
 
+	struct sockaddr_in *ipv4 = (struct sockaddr_in *)&clientAddr;
+	char ipAddress[INET_ADDRSTRLEN];
+	inet_ntop(AF_INET, &(ipv4->sin_addr), ipAddress, INET_ADDRSTRLEN);
 	int i = -1;
 	for (i = 0; i < m_kMaxConnections; ++i)
 	{
-		if (!m_aConnected[i])
+		if (!clients[i].connected)
 		{
-			m_aClients[i] = client;
-			m_aConnected[i] = true;
+			clients[i].socket = client;
+			clients[i].connected = true;
 			++m_iNumClients;
-			printf("client connected");
+			
+			printf("Client Connected  %s %d\n", ipAddress, ipv4->sin_port);
 			break;
 		}
 	}
@@ -136,47 +142,99 @@ bool CTCPServer::Listen()
 void CTCPServer::Recieve( void* pTcpServer )
 {
 	CTCPServer* srv = reinterpret_cast<CTCPServer*>(pTcpServer);
-
-	bool bClients = srv->m_iNumClients > 0;
-	while (bClients)
+	srv->m_recieve = true;
+	while (srv->m_recieve)
 	{
 		for (int i = 0; i < srv->m_kMaxConnections; ++i)
 		{
-			if (!srv->m_aConnected[i])
+			if (!srv->clients[i].connected)
 				continue;
 
-			int iResult = recv(srv->m_aClients[i], &srv->m_aRxBuffer[0], srv->m_kRxBufferLen, 0);
+			int iResult = recv(srv->clients[i].socket, &srv->m_aRxBuffer[0], srv->m_kRxBufferLen, 0);
 			if (iResult > 0)
 			{
 				printf("Bytes received: %d\n", iResult);
 
+				printf(">> %s\n", (const char*)&srv->m_aRxBuffer[0]);
+
 				// Echo the buffer back to the sender
-				int iSendResult = send(srv->m_aClients[i], &srv->m_aRxBuffer[0], iResult, 0);
-				if (iSendResult == SOCKET_ERROR)
+				//int iSendResult = send(srv->clients[i].socket, &srv->m_aRxBuffer[0], iResult, 0);
+				//if (iSendResult == SOCKET_ERROR)
+				//{
+				//	printf("send failed with error: %d\n", WSAGetLastError());
+				//	closesocket(srv->clients[i].socket);
+				//	srv->clients[i].connected = false;
+				//	--srv->m_iNumClients;
+				//}
+				//printf("Bytes sent: %d\n", iSendResult);
+
+				FILE* file = nullptr;
+				fopen_s(&file, (const char*)&srv->m_aRxBuffer[0], "r");
+				uti::u8* payload = nullptr;
+				i64 flen = 0;
+				if (file != NULL)
 				{
-					printf("send failed with error: %d\n", WSAGetLastError());
-					closesocket(srv->m_aClients[i]);
-					srv->m_aConnected[i] = false;
-					--srv->m_iNumClients;
+					fseek(file, 0, SEEK_END);
+					flen = _ftelli64(file);
+					fseek(file, 0, SEEK_SET);
+					payload = new uti::u8[flen];
+					fread((void*)payload, flen, 1, file);
+					fclose(file);
 				}
-				printf("Bytes sent: %d\n", iSendResult);
+				
+				if (payload != nullptr)
+				{
+					const char* header = "FILESTART";
+					const char* footer = "FILEEND";
+
+					send(srv->clients[i].socket, header, strlen(header), 0);
+					send(srv->clients[i].socket, (const char*)&flen, sizeof(i64), 0);
+
+					//int iSendResult = send(srv->clients[i].socket, &srv->m_aRxBuffer[0], iResult, 0);
+					//i64 maxSendSize = 1024 * 1024; // 1 MB
+					i64 numSends = (i64)((float)flen / (float)srv->m_kRxBufferLen + 0.5f);
+					i64 bytesSent = 0;
+					//for (int j = 0; j < numSends; ++j)
+					while(bytesSent < flen)
+					{
+						i64 sendLen = bytesSent + srv->m_kRxBufferLen <= flen? srv->m_kRxBufferLen
+																			 : flen - bytesSent;
+						int sendResult = send(srv->clients[i].socket, (const char*)payload, sendLen, 0);
+						if (sendResult == SOCKET_ERROR)
+						{
+							printf("send failed with error: %d\n", WSAGetLastError());
+							closesocket(srv->clients[i].socket);
+							srv->clients[i].connected = false;
+							--srv->m_iNumClients;
+							break;
+						}
+						bytesSent += sendLen;
+						payload += sendLen;
+						printf("file progress: %d\n", bytesSent);
+					}
+
+					payload -= bytesSent;
+					delete [] payload;
+					payload = nullptr;
+				}
+
+				memset(srv->m_aRxBuffer, 0, srv->m_kRxBufferLen);
 			}
 			else if (iResult == 0)
 			{
 				printf("Connection closing...\n");
-				closesocket(srv->m_aClients[i]);
-				srv->m_aConnected[i] = false;
+				closesocket(srv->clients[i].socket);
+				srv->clients[i].connected = false;
 				--srv->m_iNumClients;
 			}
 			else
 			{
 				printf("recv failed with error: %d\n", WSAGetLastError());
-				closesocket(srv->m_aClients[i]);
-				srv->m_aConnected[i] = false;
+				closesocket(srv->clients[i].socket);
+				srv->clients[i].connected = false;
 				--srv->m_iNumClients;
 			}
 		}
-		bClients = srv->m_iNumClients > 0;
 	};
 }
 
@@ -190,21 +248,23 @@ bool CTCPServer::Close()
 	if (!m_bOpen)
 		return false;
 
+	m_recieve = false;
+
 	closesocket(m_listen);
 
 	if (m_iNumClients > 0)
 	{
 		for (int i = 0; i < m_kMaxConnections; ++i)
 		{
-			if (!m_aConnected[i])
+			if (!clients[i].connected)
 				continue;
 
-			int iResult = shutdown(m_aClients[i], SD_SEND);
+			int iResult = shutdown(clients[i].socket, SD_SEND);
 			if (iResult == SOCKET_ERROR)
 			{
 				printf("shutdown failed with error: %d\n", WSAGetLastError());
-				closesocket(m_aClients[i]);
-				m_aConnected[i] = false;
+				closesocket(clients[i].socket);
+				clients[i].connected = false;
 				--m_iNumClients;
 			}
 		}

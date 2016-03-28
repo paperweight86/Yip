@@ -6,9 +6,12 @@ int yip::serverFunc(void* pData)
 {
 	yip::CTCPServer srv;
 	srv.Open();
-	srv.Listen();
-	std::thread recieveThread (CTCPServer::Recieve, &srv);
-	//srv.Recieve();
+	std::thread recieveThread(CTCPServer::Recieve, &srv);
+
+	while(true) 
+		srv.Listen();
+
+	srv.Close();
 	recieveThread.join();
 
 	return 0;
