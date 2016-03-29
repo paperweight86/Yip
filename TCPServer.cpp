@@ -153,9 +153,9 @@ void CTCPServer::Recieve( void* pTcpServer )
 			int iResult = recv(srv->clients[i].socket, &srv->m_aRxBuffer[0], srv->m_kRxBufferLen, 0);
 			if (iResult > 0)
 			{
-				printf("Bytes received: %d\n", iResult);
+				//printf("Bytes received: %d\n", iResult);
 
-				printf(">> %s\n", (const char*)&srv->m_aRxBuffer[0]);
+				//printf(">> %s\n", (const char*)&srv->m_aRxBuffer[0]);
 
 				// Echo the buffer back to the sender
 				//int iSendResult = send(srv->clients[i].socket, &srv->m_aRxBuffer[0], iResult, 0);
@@ -169,7 +169,7 @@ void CTCPServer::Recieve( void* pTcpServer )
 				//printf("Bytes sent: %d\n", iSendResult);
 
 				FILE* file = nullptr;
-				fopen_s(&file, (const char*)&srv->m_aRxBuffer[0], "r");
+				fopen_s(&file, (const char*)&srv->m_aRxBuffer[0], "rb");
 				uti::u8* payload = nullptr;
 				i64 flen = 0;
 				if (file != NULL)
@@ -178,7 +178,7 @@ void CTCPServer::Recieve( void* pTcpServer )
 					flen = _ftelli64(file);
 					fseek(file, 0, SEEK_SET);
 					payload = new uti::u8[flen];
-					fread((void*)payload, flen, 1, file);
+					size_t read = fread((void*)payload, flen, 1, file);
 					fclose(file);
 				}
 				
@@ -210,7 +210,7 @@ void CTCPServer::Recieve( void* pTcpServer )
 						}
 						bytesSent += sendLen;
 						payload += sendLen;
-						printf("file progress: %d\n", bytesSent);
+						//printf("file progress: %d\n", bytesSent);
 					}
 
 					payload -= bytesSent;

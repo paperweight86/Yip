@@ -119,19 +119,23 @@ void CTCPClient::Recieve(void* pTcpClient)
 	FILE* file = nullptr;
 	i64 flen = 0;
 	i64 read = 0;
+	float percentage = 0.0f;
+	u32 lastT = 0;
+	u32 startT = 0;
 
 	int iResult = recv(pClient->m_server, &pClient->m_aRxBuffer[0], m_kRxBufferLen, 0);
 	while (iResult > 0)
 	{
 		if (iResult > 0)
 		{
-			printf("Bytes received: %d\n", iResult);
+			//printf("Bytes received: %d\n", iResult);
 
 			if (recievingFile)
 			{				
 				i64 consumed = 0;
 				if (readSize)
 				{
+					startT = GetTickCount();
 					if (payload != nullptr)
 						delete[] payload;
 
@@ -141,10 +145,10 @@ void CTCPClient::Recieve(void* pTcpClient)
 					consumed = sizeof(i64);
 					printf("File is %d bytes...\n", flen);
 					printf("Allocating disk space...\n");
-					auto err = fopen_s(&file, "C:\\temp\\recieved.jpg", "wb+");
+					auto err = fopen_s(&file, "C:\\temp\\recieved.zip", "wb+");
 					HANDLE osfHandle = (HANDLE)_get_osfhandle(_fileno(file));
 					FlushFileBuffers(osfHandle);
-					DWORD high = flen << 32;
+					DWORD high = flen >> 32;
 					DWORD low = (DWORD)flen;
 					HANDLE h = ::CreateFileMapping(osfHandle, 0, PAGE_READWRITE, high, low, 0);
 					DWORD dwError;
@@ -159,7 +163,7 @@ void CTCPClient::Recieve(void* pTcpClient)
 					fclose(file);
 					CloseHandle(h);
 					printf("Awaiting data...\n");
-					err = fopen_s(&file, "C:\\temp\\recieved.jpg", "rb+");
+					err = fopen_s(&file, "C:\\temp\\recieved.zip", "rb+");
 					//fseek(file, 0, FILE_BEGIN);
 				}
 				
@@ -167,6 +171,8 @@ void CTCPClient::Recieve(void* pTcpClient)
 					auto written = fwrite(&pClient->m_aRxBuffer[0] + consumed, iResult - consumed, 1, file);
 					//fclose(file);
 					read += iResult - consumed;
+
+					percentage = (float)read / (float)flen * 100.0f;
 					//memcpy(payload, &pClient->m_aRxBuffer[0] + consumed, iResult - consumed);
 					//payload += iResult - consumed;
 					//read += iResult - consumed;
@@ -174,6 +180,11 @@ void CTCPClient::Recieve(void* pTcpClient)
 				    {
 						fclose(file);
 						recievingFile = false;
+						readSize = false;
+						flen = 0;
+						read = 0;
+						iResult = 0;
+						consumed = 0;
 					}
 					//{
 					//	recievingFile = false;
@@ -187,7 +198,14 @@ void CTCPClient::Recieve(void* pTcpClient)
 					//	payload = nullptr;
 					//}
 				}
-				printf("File Progress: %d\n", read);
+				//printf("File Progress: %d\n", read);
+				if (GetTickCount() - lastT > 500 || !recievingFile)
+				{
+					lastT = GetTickCount();
+					printf("%d \%\r", (int)percentage);
+					if (!recievingFile)
+						printf("\n");
+				}
 			}
 			else
 			{
