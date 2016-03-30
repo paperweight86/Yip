@@ -128,8 +128,6 @@ void CTCPClient::Recieve(void* pTcpClient)
 	{
 		if (iResult > 0)
 		{
-			//printf("Bytes received: %d\n", iResult);
-
 			if (recievingFile)
 			{				
 				i64 consumed = 0;
@@ -164,18 +162,15 @@ void CTCPClient::Recieve(void* pTcpClient)
 					CloseHandle(h);
 					printf("Awaiting data...\n");
 					err = fopen_s(&file, "C:\\temp\\recieved.zip", "rb+");
-					//fseek(file, 0, FILE_BEGIN);
 				}
 				
 				{
 					auto written = fwrite(&pClient->m_aRxBuffer[0] + consumed, iResult - consumed, 1, file);
-					//fclose(file);
+					
 					read += iResult - consumed;
 
 					percentage = (float)read / (float)flen * 100.0f;
-					//memcpy(payload, &pClient->m_aRxBuffer[0] + consumed, iResult - consumed);
-					//payload += iResult - consumed;
-					//read += iResult - consumed;
+
 					if (read >= flen)
 				    {
 						fclose(file);
@@ -186,19 +181,8 @@ void CTCPClient::Recieve(void* pTcpClient)
 						iResult = 0;
 						consumed = 0;
 					}
-					//{
-					//	recievingFile = false;
-					//	payload -= flen;
-					//	auto err = fopen_s(&file, "C:\\temp\\recieved.jpg", "wb");
-					//	fwrite(payload, flen, 1, file);
-					//	fclose(file);
-					//	flen = 0;
-					//	read = 0;
-					//	delete [] payload;
-					//	payload = nullptr;
-					//}
 				}
-				//printf("File Progress: %d\n", read);
+				
 				if (GetTickCount() - lastT > 500 || !recievingFile)
 				{
 					lastT = GetTickCount();
@@ -218,10 +202,6 @@ void CTCPClient::Recieve(void* pTcpClient)
 				}
 			}
 
-			//printf(">> %s\n", (const char*)&pClient->m_aRxBuffer[0]);
-			//
-			//memset(&pClient->m_aRxBuffer[0], 0, pClient->m_kRxBufferLen);
-
 			iResult = recv(pClient->m_server, &pClient->m_aRxBuffer[0], pClient->m_kRxBufferLen, 0);
 		}
 		else if (iResult == 0)
@@ -237,7 +217,6 @@ void CTCPClient::Recieve(void* pTcpClient)
 
 void CTCPClient::Respond( const u8* message, ptr messageLength )
 {
-	//sprintf_s<m_kTxBufferLen>(m_aTxBuffer, message);
 	memcpy_s(m_aTxBuffer, m_kTxBufferLen, message, messageLength);
 	int iResult = send(m_server, m_aTxBuffer, (int)strlen(m_aTxBuffer), 0);
 	if (iResult == SOCKET_ERROR)

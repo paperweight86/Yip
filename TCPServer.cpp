@@ -153,21 +153,6 @@ void CTCPServer::Recieve( void* pTcpServer )
 			int iResult = recv(srv->clients[i].socket, &srv->m_aRxBuffer[0], srv->m_kRxBufferLen, 0);
 			if (iResult > 0)
 			{
-				//printf("Bytes received: %d\n", iResult);
-
-				//printf(">> %s\n", (const char*)&srv->m_aRxBuffer[0]);
-
-				// Echo the buffer back to the sender
-				//int iSendResult = send(srv->clients[i].socket, &srv->m_aRxBuffer[0], iResult, 0);
-				//if (iSendResult == SOCKET_ERROR)
-				//{
-				//	printf("send failed with error: %d\n", WSAGetLastError());
-				//	closesocket(srv->clients[i].socket);
-				//	srv->clients[i].connected = false;
-				//	--srv->m_iNumClients;
-				//}
-				//printf("Bytes sent: %d\n", iSendResult);
-
 				FILE* file = nullptr;
 				fopen_s(&file, (const char*)&srv->m_aRxBuffer[0], "rb");
 				uti::u8* payload = nullptr;
@@ -190,11 +175,9 @@ void CTCPServer::Recieve( void* pTcpServer )
 					send(srv->clients[i].socket, header, strlen(header), 0);
 					send(srv->clients[i].socket, (const char*)&flen, sizeof(i64), 0);
 
-					//int iSendResult = send(srv->clients[i].socket, &srv->m_aRxBuffer[0], iResult, 0);
-					//i64 maxSendSize = 1024 * 1024; // 1 MB
 					i64 numSends = (i64)((float)flen / (float)srv->m_kRxBufferLen + 0.5f);
 					i64 bytesSent = 0;
-					//for (int j = 0; j < numSends; ++j)
+					
 					while(bytesSent < flen)
 					{
 						i64 sendLen = bytesSent + srv->m_kRxBufferLen <= flen? srv->m_kRxBufferLen
@@ -210,7 +193,6 @@ void CTCPServer::Recieve( void* pTcpServer )
 						}
 						bytesSent += sendLen;
 						payload += sendLen;
-						//printf("file progress: %d\n", bytesSent);
 					}
 
 					payload -= bytesSent;
