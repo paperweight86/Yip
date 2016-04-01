@@ -16,5 +16,13 @@
     <Filter Include="inc">
       <UniqueIdentifier>{8c9fcde9-52dc-4277-b3f4-0e25d3daab1f}</UniqueIdentifier>
     </Filter>
+    <Filter Include="doc">
+      <UniqueIdentifier>{4721b986-806f-4b92-9da9-54307d8a7aaa}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="next.txt">
+      <Filter>doc</Filter>
+    </Text>
   </ItemGroup>
 </Project>

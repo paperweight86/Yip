@@ -87,11 +87,11 @@ bool CTCPClient::Open(const char* address, uti::uint32 port /*= m_kDefaultPort*/
 		struct sockaddr_in *ipv4 = (struct sockaddr_in *)pAdd->ai_addr;
 		char ipAddress[INET_ADDRSTRLEN];
 		inet_ntop(AF_INET, &(ipv4->sin_addr), ipAddress, INET_ADDRSTRLEN);
-		printf("Connecting to %s\n", ipAddress);
+		printf("Connecting to %s:%s\n", ipAddress, portStr);
 		iResult = connect(m_server, pAdd->ai_addr, (int)pAdd->ai_addrlen);
 		if (iResult == SOCKET_ERROR) 
 		{
-			printf("Connectiong failed!\n");
+			printf("Connection failed!\n");
 			closesocket(m_server);
 			m_server = INVALID_SOCKET;
 			continue;
@@ -160,7 +160,7 @@ void CTCPClient::Recieve(void* pTcpClient)
 					SetFilePointerEx(h, tempLrgInt, 0, FILE_BEGIN);
 					fclose(file);
 					CloseHandle(h);
-					printf("Awaiting data...\n");
+					printf("Writing file...\n");
 					err = fopen_s(&file, "C:\\temp\\recieved.zip", "rb+");
 				}
 				

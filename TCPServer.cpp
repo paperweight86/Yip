@@ -90,6 +90,11 @@ bool CTCPServer::Open(uti::uint32 listenPort /*= m_kDefaultPort*/)
 		return false;
 	}
 
+	struct sockaddr_in *ipv4 = (struct sockaddr_in *)addr->ai_addr;
+	char ipAddress[INET_ADDRSTRLEN];
+	inet_ntop(AF_INET, &(ipv4->sin_addr), ipAddress, INET_ADDRSTRLEN);
+	printf("Server started at %s:%s\n", ipAddress, portStr);
+
 	// Clean up
 	freeaddrinfo(addr);
 
@@ -128,13 +133,16 @@ bool CTCPServer::Listen()
 			clients[i].connected = true;
 			++m_iNumClients;
 			
-			printf("Client Connected  %s %d\n", ipAddress, ipv4->sin_port);
+			printf("client %d Connected %s\n", i, ipAddress);
 			break;
 		}
 	}
 
-	if (i == -1)
+	if (i == m_kMaxConnections)
+	{
+		printf("client at %s refused max connections reached (%d)\n", ipAddress, i);
 		return false;
+	}
 
 	return true;
 }
@@ -211,7 +219,7 @@ void CTCPServer::Recieve( void* pTcpServer )
 			}
 			else
 			{
-				printf("recv failed with error: %d\n", WSAGetLastError());
+				printf("client %d disconnected, recv failed with error: %d\n", i, WSAGetLastError());
 				closesocket(srv->clients[i].socket);
 				srv->clients[i].connected = false;
 				--srv->m_iNumClients;
