@@ -194,7 +194,7 @@ void CTCPClient::Recieve(void* pTcpClient)
 			else
 			{
 				const char* header = "FILESTART";
-				if (iResult == strlen(header) && strcmp((const char*)&pClient->m_aRxBuffer[0], header) == 0)
+				if (iResult == strlen(header) && strncmp((const char*)&pClient->m_aRxBuffer[0], header, iResult) == 0)
 				{
 					printf("Recieving file...\n");
 					recievingFile = true;
