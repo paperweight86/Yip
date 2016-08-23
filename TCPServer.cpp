@@ -13,6 +13,8 @@ using namespace yip;
 #include <stdlib.h>
 #include <stdio.h>
 
+#include <process.h>
+
 CTCPServer::CTCPServer() : m_listen(INVALID_SOCKET), 
 						   m_iNumClients(0), 
 						   m_bOpen(false)
@@ -126,6 +128,8 @@ bool CTCPServer::Listen()
 		{
 			clients[i].socket = client;
 			clients[i].connected = true;
+			
+			clients[i].rx_thread = _beginthread(ClientRecieve, 0, clients + i);
 			++m_iNumClients;
 			
 			printf("Client Connected  %s %d\n", ipAddress, ipv4->sin_port);
@@ -139,102 +143,132 @@ bool CTCPServer::Listen()
 	return true;
 }
 
+void CTCPServer::ClientRecieve(void* client)
+{
+	ServerClient* client_ptr = (ServerClient*)client;
+	uti::int8 rx_buffer[CTCPServer::m_kRxBufferLen];
+	while (1)
+	{
+		int iResult = recv(client_ptr->socket, rx_buffer, CTCPServer::m_kRxBufferLen, 0);
+		if (iResult > 0)
+		{
+			printf("Bytes received: %d\n", iResult);
+
+			printf(">> %s\n", (const char*)rx_buffer);
+		}
+		else if (iResult == 0)
+		{
+			printf("Connection closing...\n");
+			closesocket(client_ptr->socket);
+			client_ptr->connected = false;
+			break;
+		}
+		else
+		{
+			printf("recv failed with error: %d\n", WSAGetLastError());
+			closesocket(client_ptr->socket);
+			client_ptr->connected = false;
+			break;
+		}
+	}
+}
+
 void CTCPServer::Recieve( void* pTcpServer )
 {
 	CTCPServer* srv = reinterpret_cast<CTCPServer*>(pTcpServer);
 	srv->m_recieve = true;
 	while (srv->m_recieve)
 	{
-		for (int i = 0; i < srv->m_kMaxConnections; ++i)
-		{
-			if (!srv->clients[i].connected)
-				continue;
+		//for (int i = 0; i < srv->m_kMaxConnections; ++i)
+		//{
+		//	if (!srv->clients[i].connected)
+		//		continue;
 
-			int iResult = recv(srv->clients[i].socket, &srv->m_aRxBuffer[0], srv->m_kRxBufferLen, 0);
-			if (iResult > 0)
-			{
-				printf("Bytes received: %d\n", iResult);
+		//	int iResult = recv(srv->clients[i].socket, &srv->m_aRxBuffer[0], srv->m_kRxBufferLen, 0);
+		//	if (iResult > 0)
+		//	{
+		//		printf("Bytes received: %d\n", iResult);
 
-				printf(">> %s\n", (const char*)&srv->m_aRxBuffer[0]);
+		//		printf(">> %s\n", (const char*)&srv->m_aRxBuffer[0]);
 
-				// Echo the buffer back to the sender
-				//int iSendResult = send(srv->clients[i].socket, &srv->m_aRxBuffer[0], iResult, 0);
-				//if (iSendResult == SOCKET_ERROR)
-				//{
-				//	printf("send failed with error: %d\n", WSAGetLastError());
-				//	closesocket(srv->clients[i].socket);
-				//	srv->clients[i].connected = false;
-				//	--srv->m_iNumClients;
-				//}
-				//printf("Bytes sent: %d\n", iSendResult);
+		//		// Echo the buffer back to the sender
+		//		//int iSendResult = send(srv->clients[i].socket, &srv->m_aRxBuffer[0], iResult, 0);
+		//		//if (iSendResult == SOCKET_ERROR)
+		//		//{
+		//		//	printf("send failed with error: %d\n", WSAGetLastError());
+		//		//	closesocket(srv->clients[i].socket);
+		//		//	srv->clients[i].connected = false;
+		//		//	--srv->m_iNumClients;
+		//		//}
+		//		//printf("Bytes sent: %d\n", iSendResult);
 
-				FILE* file = nullptr;
-				fopen_s(&file, (const char*)&srv->m_aRxBuffer[0], "r");
-				uti::u8* payload = nullptr;
-				i64 flen = 0;
-				if (file != NULL)
-				{
-					fseek(file, 0, SEEK_END);
-					flen = _ftelli64(file);
-					fseek(file, 0, SEEK_SET);
-					payload = new uti::u8[flen];
-					fread((void*)payload, flen, 1, file);
-					fclose(file);
-				}
-				
-				if (payload != nullptr)
-				{
-					const char* header = "FILESTART";
-					const char* footer = "FILEEND";
+		//		FILE* file = nullptr;
+		//		fopen_s(&file, (const char*)&srv->m_aRxBuffer[0], "r");
+		//		uti::u8* payload = nullptr;
+		//		i64 flen = 0;
+		//		if (file != NULL)
+		//		{
+		//			fseek(file, 0, SEEK_END);
+		//			flen = _ftelli64(file);
+		//			fseek(file, 0, SEEK_SET);
+		//			payload = new uti::u8[flen];
+		//			fread((void*)payload, flen, 1, file);
+		//			fclose(file);
+		//		}
+		//		
+		//		if (payload != nullptr)
+		//		{
+		//			const char* header = "FILESTART";
+		//			const char* footer = "FILEEND";
 
-					send(srv->clients[i].socket, header, strlen(header), 0);
-					send(srv->clients[i].socket, (const char*)&flen, sizeof(i64), 0);
+		//			send(srv->clients[i].socket, header, strlen(header), 0);
+		//			send(srv->clients[i].socket, (const char*)&flen, sizeof(i64), 0);
 
-					//int iSendResult = send(srv->clients[i].socket, &srv->m_aRxBuffer[0], iResult, 0);
-					//i64 maxSendSize = 1024 * 1024; // 1 MB
-					i64 numSends = (i64)((float)flen / (float)srv->m_kRxBufferLen + 0.5f);
-					i64 bytesSent = 0;
-					//for (int j = 0; j < numSends; ++j)
-					while(bytesSent < flen)
-					{
-						i64 sendLen = bytesSent + srv->m_kRxBufferLen <= flen? srv->m_kRxBufferLen
-																			 : flen - bytesSent;
-						int sendResult = send(srv->clients[i].socket, (const char*)payload, sendLen, 0);
-						if (sendResult == SOCKET_ERROR)
-						{
-							printf("send failed with error: %d\n", WSAGetLastError());
-							closesocket(srv->clients[i].socket);
-							srv->clients[i].connected = false;
-							--srv->m_iNumClients;
-							break;
-						}
-						bytesSent += sendLen;
-						payload += sendLen;
-						printf("file progress: %d\n", bytesSent);
-					}
+		//			//int iSendResult = send(srv->clients[i].socket, &srv->m_aRxBuffer[0], iResult, 0);
+		//			//i64 maxSendSize = 1024 * 1024; // 1 MB
+		//			i64 numSends = (i64)((float)flen / (float)srv->m_kRxBufferLen + 0.5f);
+		//			i64 bytesSent = 0;
+		//			//for (int j = 0; j < numSends; ++j)
+		//			while(bytesSent < flen)
+		//			{
+		//				i64 sendLen = bytesSent + srv->m_kRxBufferLen <= flen? srv->m_kRxBufferLen
+		//																	 : flen - bytesSent;
+		//				int sendResult = send(srv->clients[i].socket, (const char*)payload, sendLen, 0);
+		//				if (sendResult == SOCKET_ERROR)
+		//				{
+		//					printf("send failed with error: %d\n", WSAGetLastError());
+		//					closesocket(srv->clients[i].socket);
+		//					srv->clients[i].connected = false;
+		//					--srv->m_iNumClients;
+		//					break;
+		//				}
+		//				bytesSent += sendLen;
+		//				payload += sendLen;
+		//				printf("file progress: %d\n", bytesSent);
+		//			}
 
-					payload -= bytesSent;
-					delete [] payload;
-					payload = nullptr;
-				}
+		//			payload -= bytesSent;
+		//			delete [] payload;
+		//			payload = nullptr;
+		//		}
 
-				memset(srv->m_aRxBuffer, 0, srv->m_kRxBufferLen);
-			}
-			else if (iResult == 0)
-			{
-				printf("Connection closing...\n");
-				closesocket(srv->clients[i].socket);
-				srv->clients[i].connected = false;
-				--srv->m_iNumClients;
-			}
-			else
-			{
-				printf("recv failed with error: %d\n", WSAGetLastError());
-				closesocket(srv->clients[i].socket);
-				srv->clients[i].connected = false;
-				--srv->m_iNumClients;
-			}
-		}
+		//		memset(srv->m_aRxBuffer, 0, srv->m_kRxBufferLen);
+		//	}
+		//	else if (iResult == 0)
+		//	{
+		//		printf("Connection closing...\n");
+		//		closesocket(srv->clients[i].socket);
+		//		srv->clients[i].connected = false;
+		//		--srv->m_iNumClients;
+		//	}
+		//	else
+		//	{
+		//		printf("recv failed with error: %d\n", WSAGetLastError());
+		//		closesocket(srv->clients[i].socket);
+		//		srv->clients[i].connected = false;
+		//		--srv->m_iNumClients;
+		//	}
+		//}
 	};
 }
 

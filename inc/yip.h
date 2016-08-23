@@ -49,18 +49,26 @@ namespace yip
 		uti::i64 recieved;
 	};
 
+
+	class YIP_API CTCPServer;
+
 	struct ServerClient
 	{
+		CTCPServer* server;
 		static const uti::u64 kMsgBufferCount = 10;
-		MsgBuffer dataQueue[kMsgBufferCount];
+		MsgBuffer msg_queue[kMsgBufferCount];
 		socket_t  socket;
 		bool      connected;
+		uti::ptr  rx_thread;
+		uti::u32  idx_read;
+		uti::u32  idx_write;
+		void (*rx_handler)(uti::u32 /*client_id*/);
 	};
 
 	class YIP_API CTCPServer
 	{
 	private:
-		static const uti::uint32 m_kDefaultPort = 7000;
+		static const uti::uint32 m_kDefaultPort = 8080;
 		//!< The size of the buffer for incoming data in bytes
 		static const uti::uint32 m_kRxBufferLen = 1024 * 10;
 		//!< The maximum number of connection supported
@@ -102,6 +110,11 @@ namespace yip
 		static void Recieve(void* pTcpServer);
 
 		/**
+		* Recives incoming data from a client
+		*/
+		static void ClientRecieve(void* client);
+
+		/**
 		  * Responds to connected clients
 		*/
 		void Repond();
@@ -110,6 +123,11 @@ namespace yip
 		  * Closes an already started server, returns true if the server was able to shutdown
 		*/
 		bool Close();
+
+		/**
+		  * Gets the client given by it's id
+		*/
+		ServerClient* GetClient(uti::u32 id) { return clients + id; }
 	};
 
 	class YIP_API CTCPClient
