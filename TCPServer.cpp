@@ -15,11 +15,11 @@ using namespace yip;
 
 #include <process.h>
 
-CTCPServer::CTCPServer() : m_listen(INVALID_SOCKET), 
-						   m_iNumClients(0), 
-						   m_bOpen(false)
+CTCPServer::CTCPServer() : m_listen(INVALID_SOCKET),
+m_iNumClients(0),
+m_bOpen(false)
 {
-	memset(&m_aRxBuffer[0],  0, m_kRxBufferLen);
+	memset(&m_aRxBuffer[0], 0, m_kRxBufferLen);
 	memset(&clients, 0, m_kMaxConnections * sizeof(ServerClient));
 
 	// Initialize Winsock
@@ -64,7 +64,7 @@ bool CTCPServer::Open(uti::uint32 listenPort /*= m_kDefaultPort*/)
 
 	addrinfo* addr = NULL;
 	int iResult = getaddrinfo(NULL, portStr, &hints, &addr);
-	if (iResult != 0) 
+	if (iResult != 0)
 	{
 		printf("getaddrinfo failed with error: %d\n", iResult);
 		WSACleanup();
@@ -83,7 +83,7 @@ bool CTCPServer::Open(uti::uint32 listenPort /*= m_kDefaultPort*/)
 
 	// Setup listening socket
 	iResult = bind(m_listen, addr->ai_addr, (int)addr->ai_addrlen);
-	if (iResult == SOCKET_ERROR) 
+	if (iResult == SOCKET_ERROR)
 	{
 		printf("bind failed with error: %d\n", WSAGetLastError());
 		freeaddrinfo(addr);
@@ -92,16 +92,21 @@ bool CTCPServer::Open(uti::uint32 listenPort /*= m_kDefaultPort*/)
 		return false;
 	}
 
+	struct sockaddr_in *ipv4 = (struct sockaddr_in *)addr->ai_addr;
+	char ipAddress[INET_ADDRSTRLEN];
+	inet_ntop(AF_INET, &(ipv4->sin_addr), ipAddress, INET_ADDRSTRLEN);
+	printf("Server started at %s:%s\n", ipAddress, portStr);
+
 	// Clean up
 	freeaddrinfo(addr);
 
 	return true;
 }
 
-bool CTCPServer::Listen() 
+bool CTCPServer::Listen()
 {
 	int iResult = listen(m_listen, SOMAXCONN);
-	if (iResult == SOCKET_ERROR) 
+	if (iResult == SOCKET_ERROR)
 	{
 		printf("listen failed with error: %d\n", WSAGetLastError());
 		closesocket(m_listen);
@@ -109,10 +114,10 @@ bool CTCPServer::Listen()
 	}
 
 	// Accept a client socket
-	sockaddr clientAddr {};
+	sockaddr clientAddr{};
 
 	socket_t client = accept(m_listen, &clientAddr, NULL);
-	if (client == INVALID_SOCKET) 
+	if (client == INVALID_SOCKET)
 	{
 		printf("accept failed with error: %d\n", WSAGetLastError());
 		return false;
@@ -128,17 +133,20 @@ bool CTCPServer::Listen()
 		{
 			clients[i].socket = client;
 			clients[i].connected = true;
-			
+
 			clients[i].rx_thread = _beginthread(ClientRecieve, 0, clients + i);
 			++m_iNumClients;
-			
-			printf("Client Connected  %s %d\n", ipAddress, ipv4->sin_port);
+
+			printf("client %d Connected %s\n", i, ipAddress);
 			break;
 		}
 	}
 
-	if (i == -1)
+	if (i == m_kMaxConnections)
+	{
+		printf("client at %s refused max connections reached (%d)\n", ipAddress, i);
 		return false;
+	}
 
 	return true;
 }
@@ -147,7 +155,7 @@ void CTCPServer::ClientRecieve(void* client)
 {
 	ServerClient* client_ptr = (ServerClient*)client;
 	uti::int8 rx_buffer[CTCPServer::m_kRxBufferLen];
-	while (1)
+	while (client_ptr->connected)
 	{
 		int iResult = recv(client_ptr->socket, rx_buffer, CTCPServer::m_kRxBufferLen, 0);
 		if (iResult > 0)
@@ -155,25 +163,25 @@ void CTCPServer::ClientRecieve(void* client)
 			printf("Bytes received: %d\n", iResult);
 
 			printf(">> %s\n", (const char*)rx_buffer);
+
+			// TODO: [DanJ] Copy to ring buffer making sure there's enough room in the buffer for the data - enforce CTCPServer::m_kRxBufferLen?
 		}
 		else if (iResult == 0)
-		{
-			printf("Connection closing...\n");
+		{			
 			closesocket(client_ptr->socket);
+			printf("Client connection closed...\n");
 			client_ptr->connected = false;
-			break;
 		}
 		else
 		{
 			printf("recv failed with error: %d\n", WSAGetLastError());
 			closesocket(client_ptr->socket);
 			client_ptr->connected = false;
-			break;
 		}
 	}
 }
 
-void CTCPServer::Recieve( void* pTcpServer )
+void CTCPServer::Recieve(void* pTcpServer)
 {
 	CTCPServer* srv = reinterpret_cast<CTCPServer*>(pTcpServer);
 	srv->m_recieve = true;

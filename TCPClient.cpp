@@ -87,11 +87,11 @@ bool CTCPClient::Open(const char* address, uti::uint32 port /*= m_kDefaultPort*/
 		struct sockaddr_in *ipv4 = (struct sockaddr_in *)pAdd->ai_addr;
 		char ipAddress[INET_ADDRSTRLEN];
 		inet_ntop(AF_INET, &(ipv4->sin_addr), ipAddress, INET_ADDRSTRLEN);
-		printf("Connecting to %s\n", ipAddress);
+		printf("Connecting to %s:%s\n", ipAddress, portStr);
 		iResult = connect(m_server, pAdd->ai_addr, (int)pAdd->ai_addrlen);
 		if (iResult == SOCKET_ERROR) 
 		{
-			printf("Connectiong failed!\n");
+			printf("Connection failed!\n");
 			closesocket(m_server);
 			m_server = INVALID_SOCKET;
 			continue;
@@ -119,19 +119,21 @@ void CTCPClient::Recieve(void* pTcpClient)
 	FILE* file = nullptr;
 	i64 flen = 0;
 	i64 read = 0;
+	float percentage = 0.0f;
+	u32 lastT = 0;
+	u32 startT = 0;
 
 	int iResult = recv(pClient->m_server, &pClient->m_aRxBuffer[0], m_kRxBufferLen, 0);
 	while (iResult > 0)
 	{
 		if (iResult > 0)
 		{
-			printf("Bytes received: %d\n", iResult);
-
 			if (recievingFile)
 			{				
 				i64 consumed = 0;
 				if (readSize)
 				{
+					startT = GetTickCount();
 					if (payload != nullptr)
 						delete[] payload;
 
@@ -141,10 +143,10 @@ void CTCPClient::Recieve(void* pTcpClient)
 					consumed = sizeof(i64);
 					printf("File is %d bytes...\n", flen);
 					printf("Allocating disk space...\n");
-					auto err = fopen_s(&file, "C:\\temp\\recieved.jpg", "wb+");
+					auto err = fopen_s(&file, "C:\\temp\\recieved.zip", "wb+");
 					HANDLE osfHandle = (HANDLE)_get_osfhandle(_fileno(file));
 					FlushFileBuffers(osfHandle);
-					DWORD high = flen << 32;
+					DWORD high = flen >> 32;
 					DWORD low = (DWORD)flen;
 					HANDLE h = ::CreateFileMapping(osfHandle, 0, PAGE_READWRITE, high, low, 0);
 					DWORD dwError;
@@ -158,51 +160,47 @@ void CTCPClient::Recieve(void* pTcpClient)
 					SetFilePointerEx(h, tempLrgInt, 0, FILE_BEGIN);
 					fclose(file);
 					CloseHandle(h);
-					printf("Awaiting data...\n");
-					err = fopen_s(&file, "C:\\temp\\recieved.jpg", "rb+");
-					//fseek(file, 0, FILE_BEGIN);
+					printf("Writing file...\n");
+					err = fopen_s(&file, "C:\\temp\\recieved.zip", "rb+");
 				}
 				
 				{
 					auto written = fwrite(&pClient->m_aRxBuffer[0] + consumed, iResult - consumed, 1, file);
-					//fclose(file);
+					
 					read += iResult - consumed;
-					//memcpy(payload, &pClient->m_aRxBuffer[0] + consumed, iResult - consumed);
-					//payload += iResult - consumed;
-					//read += iResult - consumed;
+
+					percentage = (float)read / (float)flen * 100.0f;
+
 					if (read >= flen)
 				    {
 						fclose(file);
 						recievingFile = false;
+						readSize = false;
+						flen = 0;
+						read = 0;
+						iResult = 0;
+						consumed = 0;
 					}
-					//{
-					//	recievingFile = false;
-					//	payload -= flen;
-					//	auto err = fopen_s(&file, "C:\\temp\\recieved.jpg", "wb");
-					//	fwrite(payload, flen, 1, file);
-					//	fclose(file);
-					//	flen = 0;
-					//	read = 0;
-					//	delete [] payload;
-					//	payload = nullptr;
-					//}
 				}
-				printf("File Progress: %d\n", read);
+				
+				if (GetTickCount() - lastT > 500 || !recievingFile)
+				{
+					lastT = GetTickCount();
+					printf("%d \%\r", (int)percentage);
+					if (!recievingFile)
+						printf("\n");
+				}
 			}
 			else
 			{
 				const char* header = "FILESTART";
-				if (iResult == strlen(header) && strcmp((const char*)&pClient->m_aRxBuffer[0], header) == 0)
+				if (iResult == strlen(header) && strncmp((const char*)&pClient->m_aRxBuffer[0], header, iResult) == 0)
 				{
 					printf("Recieving file...\n");
 					recievingFile = true;
 					readSize = true;
 				}
 			}
-
-			//printf(">> %s\n", (const char*)&pClient->m_aRxBuffer[0]);
-			//
-			//memset(&pClient->m_aRxBuffer[0], 0, pClient->m_kRxBufferLen);
 
 			iResult = recv(pClient->m_server, &pClient->m_aRxBuffer[0], pClient->m_kRxBufferLen, 0);
 		}
@@ -219,7 +217,6 @@ void CTCPClient::Recieve(void* pTcpClient)
 
 void CTCPClient::Respond( const u8* message, ptr messageLength )
 {
-	//sprintf_s<m_kTxBufferLen>(m_aTxBuffer, message);
 	memcpy_s(m_aTxBuffer, m_kTxBufferLen, message, messageLength);
 	int iResult = send(m_server, m_aTxBuffer, (int)strlen(m_aTxBuffer), 0);
 	if (iResult == SOCKET_ERROR)
