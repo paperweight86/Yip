@@ -14,6 +14,7 @@ using namespace yip;
 #include <stdio.h>
 
 #include <process.h>
+#include <assert.h>
 
 CTCPServer::CTCPServer() : m_listen(INVALID_SOCKET),
 m_iNumClients(0),
@@ -21,9 +22,13 @@ m_bOpen(false)
 {
 	memset(&m_aRxBuffer[0], 0, m_kRxBufferLen);
 	memset(&clients, 0, m_kMaxConnections * sizeof(ServerClient));
+	for (int i = 0; i < m_kMaxConnections; ++i)
+	{
+		clients[i].idx_read = uint32_max;
+	}
 
 	// Initialize Winsock
-	// TODO: move to dll main init
+	// TODO: move to dll main init?
 	WSADATA wsaData;
 	int iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
 	if (iResult != 0)
@@ -132,10 +137,10 @@ bool CTCPServer::Listen()
 		if (!clients[i].connected)
 		{
 			clients[i].socket = client;
-			clients[i].connected = true;
-
+			clients[i].idx_read = uint32_max;
 			clients[i].rx_thread = _beginthread(ClientRecieve, 0, clients + i);
 			++m_iNumClients;
+			clients[i].connected = true;
 
 			printf("client %d Connected %s\n", i, ipAddress);
 			break;
@@ -154,17 +159,38 @@ bool CTCPServer::Listen()
 void CTCPServer::ClientRecieve(void* client)
 {
 	ServerClient* client_ptr = (ServerClient*)client;
-	uti::int8 rx_buffer[CTCPServer::m_kRxBufferLen];
+	uti::int8 rx_buffer[RxMsgBuffer::m_kRxBufferLen];
 	while (client_ptr->connected)
 	{
-		int iResult = recv(client_ptr->socket, rx_buffer, CTCPServer::m_kRxBufferLen, 0);
+		int iResult = recv(client_ptr->socket, rx_buffer, RxMsgBuffer::m_kRxBufferLen, 0);
 		if (iResult > 0)
 		{
-			printf("Bytes received: %d\n", iResult);
+			//printf("Bytes received: %d\n", iResult);
 
-			printf(">> %s\n", (const char*)rx_buffer);
+			//printf(">> %s\n", (const char*)rx_buffer);
 
-			// TODO: [DanJ] Copy to ring buffer making sure there's enough room in the buffer for the data - enforce CTCPServer::m_kRxBufferLen?
+			if (client_ptr->idx_write == client_ptr->idx_read)
+			{
+				printf("Waiting for watcher to read data...\n");
+				while (client_ptr->connected && client_ptr->idx_write == client_ptr->idx_read)
+				{
+					_mm_pause();
+				}
+				if (client_ptr->connected)
+					printf("Resuming recveive\n");
+				else
+					break;
+			}
+			assert(	client_ptr->idx_write <= ServerClient::kMsgBufferCount );
+			client_ptr->msg_queue[client_ptr->idx_write].length = iResult;
+			memcpy_s(&client_ptr->msg_queue[client_ptr->idx_write++].data, RxMsgBuffer::m_kRxBufferLen,
+					 rx_buffer, iResult);
+
+			if (client_ptr->idx_write == ServerClient::kMsgBufferCount)
+				client_ptr->idx_write = 0;
+
+			if (client_ptr->idx_read == uint32_max)
+				client_ptr->idx_read = 0;
 		}
 		else if (iResult == 0)
 		{			
@@ -280,9 +306,37 @@ void CTCPServer::Recieve(void* pTcpServer)
 	};
 }
 
-void CTCPServer::Repond()
+bool CTCPServer::Repond( ServerClient* client, const RxMsgBuffer& msg )
 {
+	assert(client->connected);
 
+	int sendResult = send(client->socket, (const char*)msg.data, msg.length, 0);
+	if (sendResult == SOCKET_ERROR)
+	{
+		return false;
+	}
+
+	return true;
+}
+
+bool CTCPServer::CloseClient(int client_id)
+{
+	assert(client_id < m_kMaxConnections);
+
+	if (!clients[client_id].connected)
+		return false;
+
+	int iResult = shutdown(clients[client_id].socket, SD_SEND);
+	if (iResult == SOCKET_ERROR)
+	{
+		//printf("shutdown failed with error: %d\n", WSAGetLastError());
+		closesocket(clients[client_id].socket);
+		clients[client_id].connected = false;
+		--m_iNumClients;
+		return false;
+	}
+
+	return true;
 }
 
 bool CTCPServer::Close()

@@ -7,10 +7,11 @@
 #endif
 
 #include "types.h"
+#include <atomic>
 
 namespace yip
 {
-	int serverFunc(void* pData);
+	//int serverFunc(void* pData);
 	int clientFunc(void* pData);
 
 	typedef uti::ptr socket_t;
@@ -25,9 +26,10 @@ namespace yip
 		encrypt_none
 	};
 
-	struct MsgBuffer
+	struct RxMsgBuffer
 	{
-		uti::u8* data;
+		static const uti::uint32 m_kRxBufferLen = 1024 * 10;
+		uti::u8 data [m_kRxBufferLen];
 		uti::ptr length;
 	};
 
@@ -50,24 +52,24 @@ namespace yip
 	};
 
 
-	class YIP_API CTCPServer;
+	class CTCPServer;
 
 	struct ServerClient
 	{
 		CTCPServer* server;
 		static const uti::u64 kMsgBufferCount = 10;
-		MsgBuffer msg_queue[kMsgBufferCount];
+		RxMsgBuffer msg_queue[kMsgBufferCount];
 		socket_t  socket;
-		bool      connected;
+		std::atomic<bool>      connected;
 		uti::ptr  rx_thread;
-		uti::u32  idx_read;
-		uti::u32  idx_write;
+		std::atomic<uti::u32>  idx_read;
+		std::atomic<uti::u32>  idx_write;
 		void (*rx_handler)(uti::u32 /*client_id*/);
 	};
 
-	class YIP_API CTCPServer
+	class CTCPServer
 	{
-	private:
+	public:
 		static const uti::uint32 m_kDefaultPort = 8080;
 		//!< The size of the buffer for incoming data in bytes
 		static const uti::uint32 m_kRxBufferLen = 1024 * 10;
@@ -83,12 +85,14 @@ namespace yip
 		//!< The socket for listening to incoming connections
 		socket_t m_listen;
 
-		ServerClient clients[m_kMaxConnections];
+		bool m_recieve;
 
 		//!< The number of clients which are currently connected
 		int m_iNumClients;
 
-		bool m_recieve;
+	public:
+		//!< Array of clients
+		ServerClient clients[m_kMaxConnections];
 
 	public:
 		CTCPServer();
@@ -117,24 +121,24 @@ namespace yip
 		/**
 		  * Responds to connected clients
 		*/
-		void Repond();
+		bool Repond( ServerClient* client, const RxMsgBuffer& msg );
+
+		/**
+		* Closes the given clients connection
+		*/
+		bool CloseClient(int client_id);
 
 		/**
 		  * Closes an already started server, returns true if the server was able to shutdown
 		*/
 		bool Close();
-
-		/**
-		  * Gets the client given by it's id
-		*/
-		ServerClient* GetClient(uti::u32 id) { return clients + id; }
 	};
 
 	class YIP_API CTCPClient
 	{
 	private:
 		//!< The default port if one is not supplied
-		static const uti::uint32 m_kDefaultPort = 7000;
+		static const uti::uint32 m_kDefaultPort = 8080;
 		//!< The size of the buffer for incoming data in bytes
 		static const uti::uint32 m_kRxBufferLen = 1024 * 10;
 		//!< The size of the buffer for incoming data in bytes
